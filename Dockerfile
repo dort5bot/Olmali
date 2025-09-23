@@ -1,12 +1,10 @@
-#pip install --upgrade pip setuptools wheel satırında --no-cache-dir ekle → daha az katman şişmesi olur
-# builder aşamasında gcc/g++ gibi paketleri kuruyorsun ama runtime’da aslında gerek kalmıyor. Yani image küçültmek için sadece build aşamasında bırakıldı 
-
+#Final-1:cache temizleme>Python cache'leri temizleniyor+
 # Build aşaması
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Build bağımlılıklarını kur
+# Build bağımlılıklarını kur (eksik paketler eklendi)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -16,23 +14,22 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Pip'i güncelle
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Pip'i güncelle (derleme sorunlarını önlemek için)
+RUN pip install --upgrade pip setuptools wheel
 
-# Bağımlılıkları kopyala ve wheel olarak derle
+# Bağımlılıkları kopyala ve wheel olarak derle (--no-deps KALDIRILDI)
 COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # requirements.txt'yi de wheels klasörüne kopyala
 RUN cp requirements.txt /app/wheels/
 
-
 # Runtime aşaması
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Sadece gerekli runtime bağımlılıkları
+# Runtime bağımlılıkları
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -50,12 +47,26 @@ ENV PYTHONUNBUFFERED=1 \
 # Wheel'ları ve requirements.txt'yi kopyala
 COPY --from=builder /app/wheels /wheels
 
-# Wheel'lardan paketleri kur
+# Wheel'lardan paketleri kur + CACHE TEMİZLEME
 RUN pip install --no-index --find-links=/wheels -r /wheels/requirements.txt \
-    && rm -rf /wheels
+    && rm -rf /wheels \
+    && find /usr/local -depth \
+      \( \
+        \( -type d -name __pycache__ \) \
+        -o \( -type f -name '*.pyc' \) \
+        -o \( -type f -name '*.pyo' \) \
+      \) -exec rm -rf {} +
 
 # Uygulama kodunu kopyala
 COPY --chown=appuser:appgroup . .
+
+# Uygulama kodundaki cache'leri temizle
+RUN find . -depth \
+      \( \
+        \( -type d -name __pycache__ \) \
+        -o \( -type f -name '*.pyc' \) \
+        -o \( -type f -name '*.pyo' \) \
+      \) -exec rm -rf {} +
 
 # Health check ve port ayarları
 EXPOSE 3000
