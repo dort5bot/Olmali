@@ -11,6 +11,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# ✅ render/ oracle eklenmesi gerekenler
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
